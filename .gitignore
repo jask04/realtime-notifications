@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.local
+dist/
+coverage/
+.DS_Store
+*.log
+.vscode/
+.idea/
+prisma/*.db
+.claude/settings.local.json
