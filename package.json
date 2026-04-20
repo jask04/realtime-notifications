@@ -9,7 +9,10 @@
     "start": "node dist/server.js",
     "test": "vitest run",
     "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "db:migrate": "prisma migrate dev",
+    "db:generate": "prisma generate",
+    "db:studio": "prisma studio"
   },
   "repository": {
     "type": "git",
@@ -26,6 +29,7 @@
   "dependencies": {
     "@fastify/cors": "^11.2.0",
     "@fastify/helmet": "^13.0.2",
+    "@prisma/client": "^6.19.3",
     "dotenv": "^17.4.2",
     "fastify": "^5.8.5",
     "pino": "^10.3.1",
@@ -39,6 +43,7 @@
     "@vitest/coverage-v8": "^4.1.4",
     "eslint": "^10.2.1",
     "prettier": "^3.8.3",
+    "prisma": "^6.19.3",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.4"
