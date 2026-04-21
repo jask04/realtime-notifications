@@ -1,15 +1,7 @@
-import Fastify from 'fastify';
-import cors from '@fastify/cors';
-import helmet from '@fastify/helmet';
+import { createApp } from './app.js';
 import { config } from './config.js';
-import { logger } from './lib/logger.js';
 
-const app = Fastify({ loggerInstance: logger });
-
-await app.register(helmet);
-await app.register(cors, { origin: true });
-
-app.get('/health', async () => ({ ok: true, uptime: process.uptime() }));
+const app = await createApp();
 
 try {
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
