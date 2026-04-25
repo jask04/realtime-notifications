@@ -1,11 +1,15 @@
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
+import staticFiles from '@fastify/static';
 import { config } from './config.js';
 import { logger } from './lib/logger.js';
 import { authRoutes } from './routes/auth.js';
 import { notificationRoutes } from './routes/notifications.js';
+import { websocketPlugin } from './ws/server.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
@@ -14,17 +18,37 @@ declare module '@fastify/jwt' {
   }
 }
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// public/ lives next to src/, so go one level up from compiled or source dir.
+const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
+
+// Helmet's default Content-Security-Policy blocks the inline script in
+// ws-test.html and the socket.io client fetched from a CDN. Loosening it
+// only for the debug page is more trouble than it's worth, so we relax CSP
+// in dev only — production should run helmet with stricter defaults.
+const HELMET_OPTS =
+  config.NODE_ENV === 'production'
+    ? {}
+    : { contentSecurityPolicy: false };
+
 export async function createApp() {
   const app = Fastify({ loggerInstance: logger });
 
-  await app.register(helmet);
+  await app.register(helmet, HELMET_OPTS);
   await app.register(cors, { origin: true });
   await app.register(jwt, { secret: config.JWT_SECRET });
+  await app.register(staticFiles, {
+    root: PUBLIC_DIR,
+    prefix: '/',
+    // Don't shadow the API routes' `reply.send(...)`. Static is for files only.
+    decorateReply: false,
+  });
 
   app.get('/health', async () => ({ ok: true, uptime: process.uptime() }));
 
   await app.register(authRoutes);
   await app.register(notificationRoutes);
+  await app.register(websocketPlugin);
 
   return app;
 }

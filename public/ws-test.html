@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>WS test</title>
+    <style>
+      body {
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        max-width: 720px;
+        margin: 2rem auto;
+        padding: 0 1rem;
+        color: #111;
+      }
+      h1 { font-size: 1.1rem; margin-bottom: 0.25rem; }
+      .sub { color: #666; font-size: 0.85rem; margin-bottom: 1rem; }
+      #log {
+        background: #0b1020;
+        color: #d6deff;
+        padding: 0.75rem 1rem;
+        border-radius: 6px;
+        height: 360px;
+        overflow-y: auto;
+        font-size: 0.85rem;
+        white-space: pre-wrap;
+      }
+      .ok { color: #6ee7b7; }
+      .err { color: #fca5a5; }
+      .info { color: #93c5fd; }
+    </style>
+  </head>
+  <body>
+    <h1>WebSocket test client</h1>
+    <p class="sub">
+      Pass a dev token via <code>?token=...</code> in the URL. The page connects,
+      authenticates, and prints every event the server sends.
+    </p>
+    <div id="log"></div>
+
+    <script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
+    <script>
+      const log = document.getElementById('log');
+      function line(text, cls) {
+        const el = document.createElement('div');
+        if (cls) el.className = cls;
+        el.textContent = '[' + new Date().toISOString().slice(11, 19) + '] ' + text;
+        log.appendChild(el);
+        log.scrollTop = log.scrollHeight;
+      }
+
+      const params = new URLSearchParams(window.location.search);
+      const token = params.get('token');
+      if (!token) {
+        line('No token in URL. Append ?token=<JWT> and reload.', 'err');
+      } else {
+        line('Connecting...', 'info');
+        const socket = io({ auth: { token } });
+
+        socket.on('connect', () => line('socket connected, id=' + socket.id, 'ok'));
+        socket.on('connected', (data) =>
+          line('server "connected" event: ' + JSON.stringify(data), 'ok'),
+        );
+        socket.on('notification', (data) =>
+          line('NOTIFICATION: ' + JSON.stringify(data), 'ok'),
+        );
+        socket.on('disconnect', (reason) =>
+          line('disconnected: ' + reason, 'err'),
+        );
+        socket.on('connect_error', (err) =>
+          line('connect_error: ' + err.message, 'err'),
+        );
+      }
+    </script>
+  </body>
+</html>
