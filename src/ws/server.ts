@@ -23,6 +23,25 @@ declare module 'fastify' {
   }
 }
 
+// Module-level reference so non-Fastify code (the BullMQ worker) can grab
+// the active io instance without threading the Fastify app through every
+// call site.
+//
+// This is single-process glue: it works because the worker runs in the same
+// Node process as the API. Day 13 replaces it with the Socket.io Redis
+// adapter so workers running in a separate process can fan out to API
+// instances over Redis pub/sub.
+let activeIo: SocketIOServer | null = null;
+
+export function getIo(): SocketIOServer {
+  if (!activeIo) {
+    throw new Error(
+      'Socket.io has not been initialized — register websocketPlugin first',
+    );
+  }
+  return activeIo;
+}
+
 /**
  * Attach a Socket.io server to the same HTTP server Fastify is using and
  * decorate the app with `app.io`.
@@ -77,11 +96,13 @@ export const websocketPlugin: FastifyPluginAsync = async (app) => {
   });
 
   app.decorate('io', io);
+  activeIo = io;
 
   // Make sure `app.close()` tears the io down too — otherwise Vitest hangs
   // on open sockets at the end of a test run.
   app.addHook('onClose', async () => {
     await io.close();
+    activeIo = null;
   });
 };
 
