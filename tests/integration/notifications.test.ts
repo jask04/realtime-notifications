@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest';
 import { createApp } from '../../src/app.js';
 import { prisma } from '../../src/db/client.js';
-import { notificationQueue } from '../../src/queue/notifications.js';
+import {
+  notificationQueues,
+  queueForChannel,
+} from '../../src/queue/notifications.js';
 import { deadLetterQueue } from '../../src/queue/deadletter.js';
 import { redis } from '../../src/queue/connection.js';
 import { releaseReservation } from '../../src/services/idempotency.js';
@@ -37,7 +40,9 @@ describe('POST /notifications', () => {
 
     // Fresh queue state so 'waiting' assertions aren't polluted by leftovers
     // from previous runs.
-    await notificationQueue.obliterate({ force: true });
+    await Promise.all(
+      notificationQueues.map((q) => q.obliterate({ force: true })),
+    );
     await deadLetterQueue.obliterate({ force: true });
 
     const res = await app.inject({
@@ -54,7 +59,7 @@ describe('POST /notifications', () => {
     await prisma.notification.deleteMany({ where: { userId } });
     await prisma.user.deleteMany({ where: { email } });
     await app.close();
-    await notificationQueue.close();
+    await Promise.all(notificationQueues.map((q) => q.close()));
     await deadLetterQueue.close();
     await prisma.$disconnect();
     await redis.quit();
@@ -63,7 +68,9 @@ describe('POST /notifications', () => {
   beforeEach(async () => {
     // Each test starts from a clean slate for queue + notifications so we
     // can make exact count assertions.
-    await notificationQueue.obliterate({ force: true });
+    await Promise.all(
+      notificationQueues.map((q) => q.obliterate({ force: true })),
+    );
     await prisma.notification.deleteMany({ where: { userId } });
   });
 
@@ -106,7 +113,7 @@ describe('POST /notifications', () => {
     expect(row).not.toBeNull();
     expect(row?.status).toBe('QUEUED');
 
-    const waiting = await notificationQueue.getJobs(['waiting']);
+    const waiting = await queueForChannel('websocket').getJobs(['waiting']);
     const matching = waiting.filter(
       (j) => (j.data as { notificationId?: string }).notificationId === notification.id,
     );
@@ -160,7 +167,8 @@ describe('POST /notifications', () => {
     });
     expect(rows).toHaveLength(1);
 
-    const waiting = await notificationQueue.getJobs(['waiting']);
+    // The job lands in the email queue because that's the channel used.
+    const waiting = await queueForChannel('email').getJobs(['waiting']);
     const matching = waiting.filter(
       (j) => (j.data as { notificationId?: string }).notificationId === firstBody.notification.id,
     );

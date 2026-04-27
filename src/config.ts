@@ -7,6 +7,15 @@ const schema = z.object({
   JWT_SECRET: z.string().min(16),
   PORT: z.coerce.number().int().positive().default(3000),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
+
+  // SMTP (Mailtrap in dev, SendGrid/SES/Postmark in prod). Required even in
+  // dev so the email worker doesn't have to defensively no-op on missing
+  // creds — fail-fast at boot is the cleaner contract.
+  SMTP_HOST: z.string().min(1),
+  SMTP_PORT: z.coerce.number().int().positive().default(2525),
+  SMTP_USER: z.string().min(1),
+  SMTP_PASS: z.string().min(1),
+  SMTP_FROM: z.string().email().default('notifications@example.com'),
 });
 
 const parsed = schema.safeParse(process.env);

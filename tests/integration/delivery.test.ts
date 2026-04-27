@@ -7,7 +7,7 @@ import { prisma } from '../../src/db/client.js';
 import { redis } from '../../src/queue/connection.js';
 import {
   enqueueNotification,
-  notificationQueue,
+  notificationQueues,
 } from '../../src/queue/notifications.js';
 import { deadLetterQueue } from '../../src/queue/deadletter.js';
 import { startWorkers, stopWorkers } from '../../src/workers/index.js';
@@ -67,14 +67,16 @@ describe('end-to-end websocket delivery', () => {
     await prisma.notification.deleteMany({ where: { userId } });
     await prisma.user.deleteMany({ where: { email } });
     await app.close();
-    await notificationQueue.close();
+    await Promise.all(notificationQueues.map((q) => q.close()));
     await deadLetterQueue.close();
     await prisma.$disconnect();
     await redis.quit();
   });
 
   beforeEach(async () => {
-    await notificationQueue.obliterate({ force: true });
+    await Promise.all(
+      notificationQueues.map((q) => q.obliterate({ force: true })),
+    );
     await deadLetterQueue.obliterate({ force: true });
     await prisma.notification.deleteMany({ where: { userId } });
   });

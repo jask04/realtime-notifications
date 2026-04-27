@@ -1,8 +1,6 @@
 import { Queue, type JobsOptions } from 'bullmq';
 import { redis } from './connection.js';
 
-export const NOTIFICATIONS_QUEUE = 'notifications';
-
 export type NotificationChannel = 'websocket' | 'email';
 
 export interface NotificationJobData {
@@ -10,6 +8,36 @@ export interface NotificationJobData {
   userId: string;
   channel: NotificationChannel;
   payload: Record<string, unknown>;
+}
+
+// One queue per delivery channel.
+//
+// Why split: BullMQ workers don't filter jobs by name — every worker on a
+// queue competes for every job. With a single shared queue a slow email
+// send could block a websocket push (and vice versa), and adding a second
+// worker that filters on `channel` would silently drop the jobs that the
+// "wrong" worker grabbed first.
+//
+// Splitting also lets each channel tune retries, concurrency, and rate
+// limits independently — Day 9 onwards exercises that.
+export const WEBSOCKET_QUEUE = 'notifications-websocket';
+export const EMAIL_QUEUE = 'notifications-email';
+
+export const websocketQueue = new Queue<NotificationJobData>(WEBSOCKET_QUEUE, {
+  connection: redis,
+});
+export const emailQueue = new Queue<NotificationJobData>(EMAIL_QUEUE, {
+  connection: redis,
+});
+
+// Iterable view used by tests/admin tooling that wants to operate on every
+// channel (clear, count, close, etc.) without spelling them out.
+export const notificationQueues = [websocketQueue, emailQueue] as const;
+
+export function queueForChannel(
+  channel: NotificationChannel,
+): Queue<NotificationJobData> {
+  return channel === 'websocket' ? websocketQueue : emailQueue;
 }
 
 // Defaults we want on every notification job.
@@ -25,16 +53,12 @@ const DEFAULT_JOB_OPTS: JobsOptions = {
   removeOnFail: { count: 1000 },
 };
 
-export const notificationQueue = new Queue<NotificationJobData>(
-  NOTIFICATIONS_QUEUE,
-  { connection: redis },
-);
-
 export async function enqueueNotification(
   data: NotificationJobData,
   opts: JobsOptions = {},
 ): Promise<string> {
-  const job = await notificationQueue.add(data.channel, data, {
+  const queue = queueForChannel(data.channel);
+  const job = await queue.add(data.channel, data, {
     ...DEFAULT_JOB_OPTS,
     ...opts,
   });

@@ -1,25 +1,26 @@
 import { afterAll, beforeAll, expect, test } from 'vitest';
 import {
   enqueueNotification,
-  notificationQueue,
+  notificationQueues,
+  queueForChannel,
   type NotificationJobData,
 } from '../../src/queue/notifications.js';
 import { deadLetterQueue, moveToDLQ } from '../../src/queue/deadletter.js';
 import { redis } from '../../src/queue/connection.js';
 
 beforeAll(async () => {
-  // Start each test run from an empty queue so assertions on 'waiting' are deterministic.
-  await notificationQueue.obliterate({ force: true });
+  // Start each test run from empty queues so assertions on 'waiting' are deterministic.
+  await Promise.all(notificationQueues.map((q) => q.obliterate({ force: true })));
   await deadLetterQueue.obliterate({ force: true });
 });
 
 afterAll(async () => {
-  await notificationQueue.close();
+  await Promise.all(notificationQueues.map((q) => q.close()));
   await deadLetterQueue.close();
   await redis.quit();
 });
 
-test('enqueueNotification puts a job in the waiting state', async () => {
+test('enqueueNotification puts a websocket job in the websocket queue', async () => {
   const data: NotificationJobData = {
     notificationId: 'n_test_1',
     userId: 'u_test_1',
@@ -30,11 +31,18 @@ test('enqueueNotification puts a job in the waiting state', async () => {
   const jobId = await enqueueNotification(data);
   expect(jobId).toBeTypeOf('string');
 
-  const waiting = await notificationQueue.getJobs(['waiting']);
+  const wsQueue = queueForChannel('websocket');
+  const waiting = await wsQueue.getJobs(['waiting']);
   const found = waiting.find((j) => j.id === jobId);
   expect(found).toBeDefined();
   expect(found?.data).toEqual(data);
   expect(found?.opts.attempts).toBe(5);
+
+  // The email queue must not have picked it up — channel routing is the
+  // whole point of splitting per-channel queues.
+  const emailQueue = queueForChannel('email');
+  const emailWaiting = await emailQueue.getJobs(['waiting']);
+  expect(emailWaiting.find((j) => j.id === jobId)).toBeUndefined();
 });
 
 test('moveToDLQ copies a job into the dead-letter queue with metadata', async () => {
@@ -45,7 +53,8 @@ test('moveToDLQ copies a job into the dead-letter queue with metadata', async ()
     payload: { subject: 'boom' },
   };
   const jobId = await enqueueNotification(data);
-  const job = await notificationQueue.getJob(jobId);
+  const emailQueue = queueForChannel('email');
+  const job = await emailQueue.getJob(jobId);
   if (!job) throw new Error('enqueued job not found');
 
   await moveToDLQ(job, 'simulated permanent failure');

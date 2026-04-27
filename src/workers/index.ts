@@ -1,19 +1,20 @@
 import type { Worker } from 'bullmq';
 import { logger } from '../lib/logger.js';
+import { createEmailWorker } from './email.worker.js';
 import { createWebsocketWorker } from './websocket.worker.js';
 
 /**
  * Boot every delivery worker this process runs and return them so the
- * caller can close them on shutdown. Today there's only one worker
- * (websocket); Day 8 adds email.
+ * caller can close them on shutdown. One worker per channel; each owns
+ * its own queue (see `src/queue/notifications.ts` for why).
  *
  * Workers live in the same process as the API for now — the websocket
- * worker reads from a module singleton populated by the Fastify plugin.
- * Day 13 splits the API and worker processes by switching to the
+ * worker reads `io` from a module singleton populated by the Fastify
+ * plugin. Day 13 splits the API and worker processes by switching to the
  * Socket.io Redis adapter for cross-process delivery.
  */
 export function startWorkers(): Worker[] {
-  const workers = [createWebsocketWorker()];
+  const workers = [createWebsocketWorker(), createEmailWorker()];
   logger.info({ count: workers.length }, 'workers started');
   return workers;
 }

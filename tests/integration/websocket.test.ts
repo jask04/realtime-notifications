@@ -4,7 +4,7 @@ import { io as ioClient, type Socket as ClientSocket } from 'socket.io-client';
 import { createApp } from '../../src/app.js';
 import { prisma } from '../../src/db/client.js';
 import { redis } from '../../src/queue/connection.js';
-import { notificationQueue } from '../../src/queue/notifications.js';
+import { notificationQueues } from '../../src/queue/notifications.js';
 import { deadLetterQueue } from '../../src/queue/deadletter.js';
 import { getSockets, isOnline } from '../../src/ws/registry.js';
 
@@ -64,7 +64,7 @@ describe('WebSocket handshake', () => {
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { email } });
     await app.close();
-    await notificationQueue.close();
+    await Promise.all(notificationQueues.map((q) => q.close()));
     await deadLetterQueue.close();
     await prisma.$disconnect();
     await redis.quit();
