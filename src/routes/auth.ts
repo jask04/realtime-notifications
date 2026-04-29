@@ -6,6 +6,10 @@ import { authenticate } from '../middleware/auth.js';
 
 const devTokenBody = z.object({
   email: z.string().email(),
+  // Optional role claim — only `admin` is recognised, anything else is
+  // ignored. Lets the dev-token endpoint mint admin credentials for the
+  // /admin routes without needing a separate signup flow.
+  role: z.enum(['admin']).optional(),
 });
 
 export const authRoutes: FastifyPluginAsync = async (app) => {
@@ -24,15 +28,26 @@ export const authRoutes: FastifyPluginAsync = async (app) => {
       });
     }
 
-    const { email } = parsed.data;
+    const { email, role } = parsed.data;
     const user = await prisma.user.upsert({
       where: { email },
       update: {},
       create: { email },
     });
 
-    const token = app.jwt.sign({ id: user.id, email: user.email });
-    return { token, user: { id: user.id, email: user.email } };
+    const token = app.jwt.sign({
+      id: user.id,
+      email: user.email,
+      ...(role ? { role } : {}),
+    });
+    return {
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        ...(role ? { role } : {}),
+      },
+    };
   });
 
   // Protected — returns the caller's identity. Useful as a sanity check

@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
+import { prisma } from '../db/client.js';
 import { authenticate } from '../middleware/auth.js';
 import { rateLimitMiddleware } from '../middleware/ratelimit.js';
 import {
@@ -15,6 +16,21 @@ const createBody = z.object({
   channel: z.enum(['websocket', 'email']),
   payload: z.record(z.string(), z.unknown()),
   idempotencyKey: z.string().min(1).max(255).optional(),
+});
+
+const historyQuery = z.object({
+  status: z
+    .enum(['PENDING', 'QUEUED', 'SENT', 'FAILED', 'DEAD_LETTER'])
+    .optional(),
+  channel: z.enum(['websocket', 'email']).optional(),
+  // 50 by default, hard-capped at 200 so a malicious caller can't ask for
+  // a million rows in one request and pin the DB.
+  limit: z.coerce.number().int().positive().max(200).default(50),
+  // Opaque-to-the-client id of the last notification on the previous page.
+  // We don't paginate by `(createdAt, id)` because cuids are time-ordered
+  // already — id alone gives a stable sort that matches `ORDER BY createdAt
+  // DESC` for any one user's history.
+  cursor: z.string().min(1).optional(),
 });
 
 const fanoutBody = z.object({
@@ -43,6 +59,42 @@ const PER_RECIPIENT_RATE_LIMIT = {
 };
 
 export const notificationRoutes: FastifyPluginAsync = async (app) => {
+  // Authenticated history of the caller's own notifications. Filterable by
+  // status and channel; paginates forward via opaque cursor.
+  app.get(
+    '/notifications',
+    { preHandler: authenticate },
+    async (request, reply) => {
+      const parsed = historyQuery.safeParse(request.query);
+      if (!parsed.success) {
+        return reply.code(400).send({
+          error: 'Invalid query',
+          issues: parsed.error.flatten(),
+        });
+      }
+      const { status, channel, limit, cursor } = parsed.data;
+
+      const rows = await prisma.notification.findMany({
+        where: {
+          userId: request.user.id,
+          ...(status ? { status } : {}),
+          ...(channel ? { channel } : {}),
+        },
+        orderBy: { createdAt: 'desc' },
+        // Take one extra so we can tell the client whether there's another
+        // page without making them ask twice.
+        take: limit + 1,
+        ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      });
+
+      const hasMore = rows.length > limit;
+      const items = hasMore ? rows.slice(0, limit) : rows;
+      const nextCursor = hasMore ? items[items.length - 1]?.id ?? null : null;
+
+      return reply.send({ items, nextCursor });
+    },
+  );
+
   app.post(
     '/notifications',
     {

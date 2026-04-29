@@ -7,14 +7,15 @@ import jwt from '@fastify/jwt';
 import staticFiles from '@fastify/static';
 import { config } from './config.js';
 import { logger } from './lib/logger.js';
+import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { websocketPlugin } from './ws/server.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { id: string; email: string };
-    user: { id: string; email: string };
+    payload: { id: string; email: string; role?: 'admin' };
+    user: { id: string; email: string; role?: 'admin' };
   }
 }
 
@@ -48,6 +49,7 @@ export async function createApp() {
 
   await app.register(authRoutes);
   await app.register(notificationRoutes);
+  await app.register(adminRoutes);
   await app.register(websocketPlugin);
 
   return app;
