@@ -34,20 +34,35 @@ export async function stopWorkers(workers: Worker[]): Promise<void> {
 async function bootstrap(): Promise<void> {
   const { createApp } = await import('../app.js');
   const { config } = await import('../config.js');
+  const { prisma } = await import('../db/client.js');
+  const { redis } = await import('../queue/connection.js');
+  const { deadLetterQueue } = await import('../queue/deadletter.js');
+  const { notificationQueues } = await import('../queue/notifications.js');
+  const { installGracefulShutdown } = await import('../lib/shutdown.js');
 
   const app = await createApp();
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
-
   const workers = startWorkers();
 
-  const shutdown = async (signal: string) => {
-    logger.info({ signal }, 'shutting workers down');
-    await stopWorkers(workers);
-    await app.close();
-    process.exit(0);
-  };
-  process.once('SIGTERM', () => void shutdown('SIGTERM'));
-  process.once('SIGINT', () => void shutdown('SIGINT'));
+  // Same close order as src/server.ts — see the comment there for why.
+  installGracefulShutdown([
+    { name: 'http', close: () => app.close() },
+    { name: 'workers', close: () => stopWorkers(workers) },
+    {
+      name: 'queues',
+      close: async () => {
+        await Promise.all(notificationQueues.map((q) => q.close()));
+        await deadLetterQueue.close();
+      },
+    },
+    { name: 'prisma', close: () => prisma.$disconnect() },
+    {
+      name: 'redis',
+      close: async () => {
+        await redis.quit();
+      },
+    },
+  ]);
 }
 
 // Run only when invoked directly (not when imported by tests).

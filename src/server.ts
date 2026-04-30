@@ -1,5 +1,10 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
+import { prisma } from './db/client.js';
+import { installGracefulShutdown } from './lib/shutdown.js';
+import { redis } from './queue/connection.js';
+import { deadLetterQueue } from './queue/deadletter.js';
+import { notificationQueues } from './queue/notifications.js';
 import { startWorkers, stopWorkers } from './workers/index.js';
 
 const app = await createApp();
@@ -16,11 +21,31 @@ try {
 // on a separate node.
 const workers = startWorkers();
 
-const shutdown = async (signal: string) => {
-  app.log.info({ signal }, 'shutting down');
-  await stopWorkers(workers);
-  await app.close();
-  process.exit(0);
-};
-process.once('SIGTERM', () => void shutdown('SIGTERM'));
-process.once('SIGINT', () => void shutdown('SIGINT'));
+// Order matters:
+//  1. Stop the HTTP server first so no new requests start mid-shutdown.
+//  2. Drain the workers so any in-flight delivery attempt gets to write
+//     its DB row before its Redis client closes underneath it.
+//  3. Close the BullMQ queue handles next — they share the Redis client
+//     but it's cleaner to release them before the connection itself.
+//  4. Disconnect Prisma. The HTTP layer is already gone; nothing else
+//     should be querying.
+//  5. Quit Redis last — the workers and BullMQ queues both held references
+//     to it.
+installGracefulShutdown([
+  { name: 'http', close: () => app.close() },
+  { name: 'workers', close: () => stopWorkers(workers) },
+  {
+    name: 'queues',
+    close: async () => {
+      await Promise.all(notificationQueues.map((q) => q.close()));
+      await deadLetterQueue.close();
+    },
+  },
+  { name: 'prisma', close: () => prisma.$disconnect() },
+  {
+    name: 'redis',
+    close: async () => {
+      await redis.quit();
+    },
+  },
+]);

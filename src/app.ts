@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import Fastify from 'fastify';
@@ -6,6 +7,7 @@ import helmet from '@fastify/helmet';
 import jwt from '@fastify/jwt';
 import staticFiles from '@fastify/static';
 import { config } from './config.js';
+import { appErrorHandler } from './lib/error-handler.js';
 import { logger } from './lib/logger.js';
 import { adminRoutes } from './routes/admin.js';
 import { authRoutes } from './routes/auth.js';
@@ -33,7 +35,25 @@ const HELMET_OPTS =
     : { contentSecurityPolicy: false };
 
 export async function createApp() {
-  const app = Fastify({ loggerInstance: logger });
+  const app = Fastify({
+    loggerInstance: logger,
+    // Echo any inbound `x-request-id` so a load balancer's correlation id
+    // wins over our auto-generated one. Falls back to Fastify's default
+    // sequence when absent.
+    genReqId: (req) => {
+      const incoming = req.headers['x-request-id'];
+      if (typeof incoming === 'string' && incoming.length > 0) return incoming;
+      return crypto.randomUUID();
+    },
+  });
+
+  app.setErrorHandler(appErrorHandler);
+
+  // Mirror the request id back so a caller can quote it when reporting
+  // problems and we can grep it out of logs.
+  app.addHook('onSend', async (request, reply) => {
+    reply.header('x-request-id', request.id);
+  });
 
   await app.register(helmet, HELMET_OPTS);
   await app.register(cors, { origin: true });
