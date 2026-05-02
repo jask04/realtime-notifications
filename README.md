@@ -7,6 +7,8 @@ fallback for everyone else, and a Postgres history of every send. Built with
 production patterns I'd want to ship at work — idempotency, dead-letter
 queue, per-recipient rate limiting, graceful shutdown, structured logging.
 
+**Live:** [`realtime-notifications-production.up.railway.app/health`](https://realtime-notifications-production.up.railway.app/health) (Railway, with managed Postgres + Redis plugins)
+
 ## What it does
 
 - `POST /notifications` — accept a notification, write a row in Postgres,
