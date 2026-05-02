@@ -1,0 +1,23 @@
+# Railway deployment config.
+# Most of this is the platform default; making it explicit so the deploy
+# story is in version control instead of hidden behind dashboard clicks.
+
+[build]
+# Nixpacks reads package.json and picks Node automatically. Build runs
+# `npm ci` (which triggers `postinstall: prisma generate`) then `npm run
+# build` to compile TypeScript into dist/.
+builder = "NIXPACKS"
+buildCommand = "npm run build"
+
+[deploy]
+# `npm start` runs `prisma migrate deploy && node dist/server.js`, so each
+# deploy applies any new migrations before the server boots.
+startCommand = "npm start"
+
+# Railway pings this path; an unhealthy deploy is rolled back automatically.
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+# Restart on crash, but don't burn the container in a restart loop forever.
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

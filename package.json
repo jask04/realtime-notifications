@@ -6,14 +6,15 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "prisma migrate deploy && node dist/server.js",
     "start:workers": "tsx src/workers/index.ts",
     "test": "vitest run",
     "lint": "eslint src --ext .ts",
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
   },
   "repository": {
     "type": "git",
