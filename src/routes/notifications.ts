@@ -2,7 +2,7 @@ import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { prisma } from '../db/client.js';
-import { authenticate } from '../middleware/auth.js';
+import { authenticate, blockDemoRole } from '../middleware/auth.js';
 import { rateLimitMiddleware } from '../middleware/ratelimit.js';
 import {
   createNotification,
@@ -139,9 +139,13 @@ export const notificationRoutes: FastifyPluginAsync = async (app) => {
   // limiter is keyed by recipient and a fan-out targets many. Per-caller
   // limits would belong here if abuse becomes a concern; for now the 1000-
   // user cap on the body is the only guardrail.
+  //
+  // Demo tokens are blocked here: the public landing page mints them
+  // anonymously, and a 1000-recipient send from a stranger is the kind
+  // of thing you don't want sitting on the open internet.
   app.post(
     '/notifications/fanout',
-    { preHandler: authenticate },
+    { preHandler: [authenticate, blockDemoRole] },
     async (request, reply) => {
       const parsed = fanoutBody.safeParse(request.body);
       if (!parsed.success) {

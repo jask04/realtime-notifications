@@ -7,7 +7,7 @@ fallback for everyone else, and a Postgres history of every send. Built with
 production patterns I'd want to ship at work — idempotency, dead-letter
 queue, per-recipient rate limiting, graceful shutdown, structured logging.
 
-**Live:** [`realtime-notifications-production.up.railway.app/health`](https://realtime-notifications-production.up.railway.app/health) (Railway, with managed Postgres + Redis plugins)
+**Live demo:** [`realtime-notifications-production.up.railway.app`](https://realtime-notifications-production.up.railway.app) — click *Connect*, then *Send*. Mints a 1-hour demo token, opens a WebSocket, and watches a notification round-trip through the queue back to your browser.
 
 ## What it does
 
@@ -126,12 +126,13 @@ your dev server uses — they're integration tests, not heavy mocking.
 All endpoints except `/health` and `/auth/dev-token` require a Bearer JWT.
 `/admin/*` additionally requires `role: "admin"` in the JWT.
 
-### Auth (dev only — returns 404 in production)
+### Auth
 
-| Method | Path                | Body                                | Returns                          |
-| ------ | ------------------- | ----------------------------------- | -------------------------------- |
-| POST   | `/auth/dev-token`   | `{ email, role? }`                  | `{ token, user }`                |
-| GET    | `/me`               | —                                   | `{ user }`                       |
+| Method | Path                | Body                                | Returns                                              |
+| ------ | ------------------- | ----------------------------------- | ---------------------------------------------------- |
+| POST   | `/auth/dev-token`   | `{ email, role? }`                  | `{ token, user }`. Dev only — 404 in production.     |
+| POST   | `/auth/demo-token`  | —                                   | `{ token, user, expiresIn }`. Public, 5/hr per IP, 1h TTL, `role: "demo"`. |
+| GET    | `/me`               | —                                   | `{ user }`                                           |
 
 ### Notifications
 

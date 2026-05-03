@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>realtime-notifications</title>
+    <meta
+      name="description"
+      content="Real-time notification service — WebSocket delivery, BullMQ jobs, Postgres history. Live demo."
+    />
+    <style>
+      :root {
+        --bg: #0b0d12;
+        --bg-2: #11141b;
+        --bg-3: #1a1f2a;
+        --border: #232936;
+        --fg: #d8dee9;
+        --fg-dim: #8b95a7;
+        --fg-mute: #5d6678;
+        --accent: #6ee7b7;
+        --accent-dim: #34d399;
+        --warn: #fcd34d;
+        --err: #fca5a5;
+        --info: #93c5fd;
+        --link: #93c5fd;
+        --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+          Helvetica, Arial, sans-serif;
+      }
+      * { box-sizing: border-box; }
+      html, body {
+        background: var(--bg);
+        color: var(--fg);
+        font-family: var(--sans);
+        margin: 0;
+        padding: 0;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+      }
+      main {
+        max-width: 760px;
+        margin: 0 auto;
+        padding: 3rem 1.5rem 6rem;
+      }
+      h1 {
+        font-size: 1.6rem;
+        margin: 0 0 0.4rem;
+        letter-spacing: -0.01em;
+      }
+      h2 {
+        font-size: 1.05rem;
+        margin: 2.5rem 0 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        color: var(--fg-dim);
+        font-weight: 600;
+      }
+      p { margin: 0 0 1rem; }
+      .lede { color: var(--fg-dim); margin-bottom: 0.4rem; }
+      a { color: var(--link); text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      code, pre, .mono { font-family: var(--mono); }
+      code {
+        background: var(--bg-2);
+        padding: 0.1rem 0.4rem;
+        border-radius: 4px;
+        font-size: 0.88em;
+      }
+      pre {
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 1rem;
+        overflow-x: auto;
+        font-size: 0.82rem;
+        line-height: 1.45;
+        color: var(--fg-dim);
+      }
+      .card {
+        background: var(--bg-2);
+        border: 1px solid var(--border);
+        border-radius: 8px;
+        padding: 1.25rem;
+      }
+      .demo-row {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .demo-row + .demo-row { margin-top: 0.5rem; }
+      input[type='text'] {
+        flex: 1 1 240px;
+        background: var(--bg-3);
+        border: 1px solid var(--border);
+        color: var(--fg);
+        padding: 0.55rem 0.75rem;
+        border-radius: 5px;
+        font-family: var(--mono);
+        font-size: 0.85rem;
+        min-width: 0;
+      }
+      input[type='text']:focus {
+        outline: none;
+        border-color: var(--accent-dim);
+      }
+      button {
+        background: var(--accent-dim);
+        color: #042518;
+        border: 0;
+        padding: 0.55rem 1rem;
+        border-radius: 5px;
+        font-weight: 600;
+        font-size: 0.9rem;
+        cursor: pointer;
+        font-family: var(--sans);
+      }
+      button:hover { background: var(--accent); }
+      button:disabled {
+        background: var(--bg-3);
+        color: var(--fg-mute);
+        cursor: not-allowed;
+      }
+      button.secondary {
+        background: var(--bg-3);
+        color: var(--fg);
+      }
+      button.secondary:hover { background: var(--border); }
+      .status {
+        margin-top: 0.75rem;
+        font-family: var(--mono);
+        font-size: 0.82rem;
+        color: var(--fg-dim);
+      }
+      .status .id { color: var(--fg); }
+      .log {
+        margin-top: 1rem;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 0.75rem 1rem;
+        height: 220px;
+        overflow-y: auto;
+        font-family: var(--mono);
+        font-size: 0.78rem;
+        line-height: 1.55;
+        white-space: pre-wrap;
+      }
+      .log-line { color: var(--fg-dim); }
+      .log-line .ts { color: var(--fg-mute); margin-right: 0.5rem; }
+      .log-line.ok { color: var(--accent); }
+      .log-line.info { color: var(--info); }
+      .log-line.warn { color: var(--warn); }
+      .log-line.err { color: var(--err); }
+      .form {
+        display: none;
+        margin-top: 1rem;
+        padding-top: 1rem;
+        border-top: 1px dashed var(--border);
+      }
+      .form.visible { display: block; }
+      .links {
+        display: flex;
+        gap: 1.5rem;
+        flex-wrap: wrap;
+        margin-top: 0.5rem;
+      }
+      footer {
+        margin-top: 3rem;
+        padding-top: 1.5rem;
+        border-top: 1px solid var(--border);
+        color: var(--fg-mute);
+        font-size: 0.8rem;
+      }
+      .hint {
+        color: var(--fg-mute);
+        font-size: 0.78rem;
+        margin-top: 0.5rem;
+      }
+      .pill {
+        display: inline-block;
+        background: var(--bg-3);
+        border: 1px solid var(--border);
+        color: var(--fg-dim);
+        padding: 0.1rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-family: var(--mono);
+        letter-spacing: 0.02em;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>realtime-notifications</h1>
+      <p class="lede">
+        Real-time notification service — WebSocket delivery, BullMQ jobs,
+        Postgres history. Built with production patterns: idempotency,
+        dead-letter queue, per-recipient rate limiting, graceful shutdown.
+      </p>
+      <p>
+        <span class="pill">Fastify</span>
+        <span class="pill">TypeScript</span>
+        <span class="pill">Socket.io</span>
+        <span class="pill">BullMQ</span>
+        <span class="pill">Prisma</span>
+        <span class="pill">Postgres</span>
+        <span class="pill">Redis</span>
+      </p>
+
+      <h2>Live demo</h2>
+      <div class="card">
+        <p style="margin: 0 0 0.75rem;">
+          Click <strong>Connect</strong>. We mint a temporary token on the
+          server, open a WebSocket, and subscribe you to your own
+          notification stream.
+        </p>
+        <div class="demo-row">
+          <button id="connect">Connect</button>
+          <button id="disconnect" class="secondary" disabled>Disconnect</button>
+        </div>
+        <div class="status" id="status">Idle.</div>
+
+        <div class="form" id="form">
+          <p style="margin: 0 0 0.75rem; color: var(--fg-dim); font-size: 0.85rem;">
+            Send yourself a notification. The HTTP request goes to
+            <code>POST /notifications</code>; a worker picks it up off the
+            queue and pushes it back here over the WebSocket.
+          </p>
+          <div class="demo-row">
+            <input id="title" type="text" placeholder="Title" value="Hello from the demo" />
+          </div>
+          <div class="demo-row">
+            <input id="body" type="text" placeholder="Body" value="The whole pipeline ran end-to-end." />
+            <button id="send">Send</button>
+          </div>
+          <p class="hint">
+            Demo tokens last 1 hour. Rate-limited to 5 tokens / hour / IP and
+            10 sends / minute / recipient.
+          </p>
+        </div>
+
+        <div class="log" id="log" aria-live="polite"></div>
+      </div>
+
+      <h2>Architecture</h2>
+      <pre>                             ┌──────────────────┐
+                             │  Postgres        │
+                             │  (notifications, │
+                             │   users, idem)   │
+                             └────────▲─────────┘
+                                      │
+   POST /notifications        ┌───────┴────────┐
+   ──────────────────────▶    │  Fastify API   │  ◀── JWT (Bearer)
+   GET  /notifications        │  + Socket.io   │  ◀── WebSocket clients
+                              └───┬────────┬───┘
+                                  │        │
+                        enqueue   │        │   subscribe (Redis adapter)
+                                  ▼        ▼
+                           ┌───────────────────┐
+                           │  Redis            │
+                           │  (BullMQ queues + │
+                           │   pub/sub fanout) │
+                           └───┬─────────┬─────┘
+                               │         │
+                    websocket  │         │  email
+                    queue      │         │  queue
+                               ▼         ▼
+                        ┌──────────┐ ┌─────────────┐
+                        │   WS     │ │   Email     │
+                        │  worker  │ │  worker     │
+                        └──────────┘ └─────────────┘
+                               │            │
+                        emit to socket   SMTP send</pre>
+
+      <h2>What it does</h2>
+      <ul style="color: var(--fg-dim); padding-left: 1.25rem;">
+        <li><code>POST /notifications</code> — create a notification, write to Postgres, enqueue a delivery job. Idempotent on a client key.</li>
+        <li><code>POST /notifications/fanout</code> — same, for up to 1000 recipients in one request. One job per recipient so retries scope properly.</li>
+        <li>WebSocket clients connect with a JWT and receive their notifications live (Socket.io with Redis adapter for horizontal scale).</li>
+        <li>Email worker delivers anything that didn't go via WebSocket — SMTP through Mailtrap in dev, swap for SES/SendGrid in prod.</li>
+        <li><code>GET /notifications</code> — paginated history of the caller's own notifications, filterable by status and channel.</li>
+        <li><code>GET /admin/queue/*</code> — operator endpoints for queue stats, DLQ inspection, and re-driving dead-lettered jobs.</li>
+      </ul>
+
+      <h2>Links</h2>
+      <div class="links">
+        <a href="https://github.com/jask04/realtime-notifications">GitHub repo</a>
+        <a href="/health">/health</a>
+        <a href="/ws-test.html">/ws-test.html</a>
+        <a href="https://github.com/jask04/realtime-notifications#readme">README</a>
+      </div>
+
+      <footer>
+        Built as a portfolio project. Source on
+        <a href="https://github.com/jask04/realtime-notifications">GitHub</a>.
+      </footer>
+    </main>
+
+    <script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
+    <script>
+      (function () {
+        const $ = (id) => document.getElementById(id);
+        const log = $('log');
+        const status = $('status');
+        const connectBtn = $('connect');
+        const disconnectBtn = $('disconnect');
+        const sendBtn = $('send');
+        const form = $('form');
+
+        let socket = null;
+        let me = null; // { id, email, role }
+
+        function ts() {
+          return new Date().toISOString().slice(11, 19);
+        }
+        function line(text, cls) {
+          const el = document.createElement('div');
+          el.className = 'log-line' + (cls ? ' ' + cls : '');
+          const t = document.createElement('span');
+          t.className = 'ts';
+          t.textContent = '[' + ts() + ']';
+          el.appendChild(t);
+          el.appendChild(document.createTextNode(text));
+          log.appendChild(el);
+          log.scrollTop = log.scrollHeight;
+        }
+        function setStatus(html) {
+          status.innerHTML = html;
+        }
+
+        async function mintToken() {
+          const res = await fetch('/auth/demo-token', { method: 'POST' });
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            const msg = err.error || ('demo-token returned ' + res.status);
+            throw new Error(msg);
+          }
+          return res.json();
+        }
+
+        async function connect() {
+          connectBtn.disabled = true;
+          line('Minting demo token...', 'info');
+          try {
+            const { token, user } = await mintToken();
+            me = user;
+            line('Got token for ' + user.email, 'ok');
+            setStatus(
+              'Connecting as <span class="id">' +
+                user.email +
+                '</span>...',
+            );
+
+            socket = io({ auth: { token }, reconnection: false });
+
+            socket.on('connect', () => {
+              line('WebSocket connected (id=' + socket.id + ')', 'ok');
+              setStatus(
+                'Connected as <span class="id">' +
+                  user.email +
+                  '</span>',
+              );
+              disconnectBtn.disabled = false;
+              form.classList.add('visible');
+            });
+
+            socket.on('connected', (data) => {
+              line('server "connected" event: ' + JSON.stringify(data), 'ok');
+            });
+
+            socket.on('notification', (data) => {
+              line(
+                '⚡ NOTIFICATION: ' + JSON.stringify(data, null, 0),
+                'ok',
+              );
+            });
+
+            socket.on('disconnect', (reason) => {
+              line('disconnected: ' + reason, 'warn');
+              setStatus('Disconnected.');
+              disconnectBtn.disabled = true;
+              connectBtn.disabled = false;
+              form.classList.remove('visible');
+            });
+
+            socket.on('connect_error', (err) => {
+              line('connect_error: ' + err.message, 'err');
+              setStatus('Connect failed.');
+              connectBtn.disabled = false;
+            });
+          } catch (err) {
+            line('mint failed: ' + err.message, 'err');
+            setStatus('Idle.');
+            connectBtn.disabled = false;
+          }
+        }
+
+        function disconnect() {
+          if (socket) socket.close();
+          socket = null;
+          me = null;
+        }
+
+        async function send() {
+          if (!me || !socket) return;
+          const title = $('title').value.trim() || 'Hello';
+          const body = $('body').value.trim() || '';
+          sendBtn.disabled = true;
+          line('POST /notifications {title, body}...', 'info');
+          try {
+            const res = await fetch('/notifications', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization:
+                  'Bearer ' +
+                  // socket.io-client doesn't expose the original token;
+                  // we stash it on the socket via auth so we can re-use it.
+                  (socket.auth && socket.auth.token ? socket.auth.token : ''),
+              },
+              body: JSON.stringify({
+                userId: me.id,
+                type: 'demo',
+                channel: 'websocket',
+                payload: { title, body },
+              }),
+            });
+            const json = await res.json();
+            if (res.ok) {
+              line(
+                'Queued: id=' +
+                  json.notification.id +
+                  ' status=' +
+                  json.notification.status,
+                'info',
+              );
+            } else {
+              line(
+                'POST failed (' + res.status + '): ' + (json.error || 'unknown'),
+                'err',
+              );
+            }
+          } catch (err) {
+            line('send error: ' + err.message, 'err');
+          } finally {
+            sendBtn.disabled = false;
+          }
+        }
+
+        connectBtn.addEventListener('click', connect);
+        disconnectBtn.addEventListener('click', disconnect);
+        sendBtn.addEventListener('click', send);
+      })();
+    </script>
+  </body>
+</html>

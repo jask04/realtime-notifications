@@ -16,8 +16,8 @@ import { websocketPlugin } from './ws/server.js';
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: { id: string; email: string; role?: 'admin' };
-    user: { id: string; email: string; role?: 'admin' };
+    payload: { id: string; email: string; role?: 'admin' | 'demo' };
+    user: { id: string; email: string; role?: 'admin' | 'demo' };
   }
 }
 
@@ -37,6 +37,11 @@ const HELMET_OPTS =
 export async function createApp() {
   const app = Fastify({
     loggerInstance: logger,
+    // Trust X-Forwarded-* headers from the platform's edge proxy so
+    // `request.ip` is the actual client and not the proxy. Required for
+    // per-IP rate limiting to do anything useful behind Railway / any
+    // reverse proxy.
+    trustProxy: true,
     // Echo any inbound `x-request-id` so a load balancer's correlation id
     // wins over our auto-generated one. Falls back to Fastify's default
     // sequence when absent.

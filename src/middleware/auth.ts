@@ -36,3 +36,21 @@ export async function requireAdmin(
     await reply.code(403).send({ error: 'Admin role required' });
   }
 }
+
+/**
+ * Fastify preHandler that rejects callers minted by `/auth/demo-token`.
+ * Used on high-blast-radius endpoints (e.g. fanout) so an anonymous demo
+ * visitor can't trigger a thousand-recipient send. Assumes `authenticate`
+ * (or another preHandler that calls `jwtVerify`) has already run — wire
+ * it after that one in the route's `preHandler` array.
+ */
+export async function blockDemoRole(
+  request: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
+  if (request.user?.role === 'demo') {
+    await reply.code(403).send({
+      error: 'Demo accounts cannot use this endpoint',
+    });
+  }
+}
