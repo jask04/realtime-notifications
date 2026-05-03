@@ -324,13 +324,44 @@
           el.appendChild(document.createTextNode(text));
           log.appendChild(el);
           log.scrollTop = log.scrollHeight;
+          return el;
+        }
+        function notificationLine(payload) {
+          // The notification log entry is the visual centerpiece of the demo
+          // — split title/body across lines instead of dumping a JSON blob.
+          const el = line('⚡ ' + (payload.title || 'Notification'), 'ok');
+          if (payload.body) {
+            const body = document.createElement('div');
+            body.style.paddingLeft = '4ch';
+            body.style.color = 'var(--fg-dim)';
+            body.textContent = payload.body;
+            el.appendChild(body);
+          }
         }
         function setStatus(html) {
           status.innerHTML = html;
         }
+        function formatRetryAfter(seconds) {
+          const s = Number(seconds);
+          if (!Number.isFinite(s) || s <= 0) return 'a moment';
+          if (s < 60) return s + 's';
+          const mins = Math.ceil(s / 60);
+          return mins + (mins === 1 ? ' minute' : ' minutes');
+        }
 
         async function mintToken() {
           const res = await fetch('/auth/demo-token', { method: 'POST' });
+          if (res.status === 429) {
+            const err = await res.json().catch(() => ({}));
+            const wait = formatRetryAfter(
+              err.retryAfterSeconds ?? res.headers.get('retry-after'),
+            );
+            throw new Error(
+              'Rate limit hit (5 demo tokens / hour / IP). Retry in ' +
+                wait +
+                '.',
+            );
+          }
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
             const msg = err.error || ('demo-token returned ' + res.status);
@@ -370,10 +401,7 @@
             });
 
             socket.on('notification', (data) => {
-              line(
-                '⚡ NOTIFICATION: ' + JSON.stringify(data, null, 0),
-                'ok',
-              );
+              notificationLine(data && data.payload ? data.payload : {});
             });
 
             socket.on('disconnect', (reason) => {
@@ -434,6 +462,21 @@
                   ' status=' +
                   json.notification.status,
                 'info',
+              );
+              // Clear the inputs so the next send is one keystroke and a
+              // click away. Placeholders explain what to type.
+              $('title').value = '';
+              $('body').value = '';
+              $('title').focus();
+            } else if (res.status === 429) {
+              const wait = formatRetryAfter(
+                json.retryAfterSeconds ?? res.headers.get('retry-after'),
+              );
+              line(
+                'Rate limit hit (10 sends / minute / recipient). Retry in ' +
+                  wait +
+                  '.',
+                'warn',
               );
             } else {
               line(
