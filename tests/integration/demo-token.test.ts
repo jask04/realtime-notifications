@@ -19,6 +19,13 @@ describe('POST /auth/demo-token', () => {
   beforeAll(async () => {
     app = await createApp();
     await app.ready();
+    // Wipe any leftover demo-token rate-limit buckets from prior runs so
+    // the fixed IPs below get a fresh quota. (The randomized rate-limit
+    // test below doesn't need this; the other tests do.)
+    const keys = await redis.keys('ratelimit:demo-token:*');
+    if (keys.length > 0) {
+      await redis.del(...keys);
+    }
   });
 
   afterAll(async () => {
@@ -73,7 +80,10 @@ describe('POST /auth/demo-token', () => {
   });
 
   test('rate-limits a single IP after 5 requests', async () => {
-    const ip = '203.0.113.99';
+    // Randomise the IP per run so leftover Redis state from a prior test
+    // run doesn't poison the bucket. The 203.0.113.0/24 range is reserved
+    // for documentation, so it's safe to fabricate addresses in.
+    const ip = `203.0.113.${100 + Math.floor(Math.random() * 100)}`;
     for (let i = 0; i < 5; i++) {
       const res = await app.inject({
         method: 'POST',

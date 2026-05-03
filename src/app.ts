@@ -25,13 +25,33 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // public/ lives next to src/, so go one level up from compiled or source dir.
 const PUBLIC_DIR = path.resolve(__dirname, '..', 'public');
 
-// Helmet's default Content-Security-Policy blocks the inline script in
-// ws-test.html and the socket.io client fetched from a CDN. Loosening it
-// only for the debug page is more trouble than it's worth, so we relax CSP
-// in dev only — production should run helmet with stricter defaults.
+// CSP needs to allow the things our static pages actually use. Helmet's
+// out-of-the-box default is `script-src 'self'`, which blocks both the
+// inline scripts in `index.html` / `ws-test.html` AND the socket.io
+// client we load from cdn.socket.io. The result is a totally silent
+// breakage where the page renders but no JS runs.
+//
+// We override two directives:
+//   - script-src: allow self, the CDN, and inline (used by both pages)
+//   - connect-src: allow self plus ws/wss so the browser can open a
+//     WebSocket back to this server
+//
+// In dev we just turn CSP off — easier to iterate without a stale header
+// breaking things on every dependency change.
 const HELMET_OPTS =
   config.NODE_ENV === 'production'
-    ? {}
+    ? {
+        contentSecurityPolicy: {
+          directives: {
+            'script-src': [
+              "'self'",
+              "'unsafe-inline'",
+              'https://cdn.socket.io',
+            ],
+            'connect-src': ["'self'", 'ws:', 'wss:'],
+          },
+        },
+      }
     : { contentSecurityPolicy: false };
 
 export async function createApp() {
