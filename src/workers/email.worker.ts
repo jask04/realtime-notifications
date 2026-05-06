@@ -12,9 +12,10 @@ import {
 import { attachFailureHandler } from './failure-handler.js';
 
 // Shape the API caller has to put in `payload` for an email channel.
-// Validated per-job rather than at the API boundary because the API doesn't
-// (yet) know which payload schema applies to which channel — Day 9 may
-// pull this up to the route validator.
+// Validated per-job rather than at the API boundary because the route
+// doesn't currently know which payload schema applies to which channel.
+// Pulling this validation up into the route would be a fair refactor
+// once a third channel makes the per-channel branch worth its weight.
 const emailPayloadSchema = z.object({
   subject: z.string().min(1).max(200),
   html: z.string().min(1),

@@ -9,8 +9,8 @@ export const DEMO_CLEANUP_SCHEDULER_ID = 'demo-cleanup';
 
 // Top of every hour — small enough to keep the user table tight, large
 // enough that the DELETE is essentially free under any portfolio-grade
-// load. Day 15's demo tokens last 1h, so by the 24h cutoff used in the
-// worker any session minted off these rows is long dead.
+// load. Demo tokens last 1h, so by the 24h cutoff used in the worker
+// any session minted off these rows is long dead.
 export const CLEANUP_CRON_PATTERN = '0 * * * *';
 
 // Empty by design — the worker reads everything it needs from `prisma`

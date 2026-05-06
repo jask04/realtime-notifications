@@ -13,10 +13,11 @@ import { createWebsocketWorker } from './websocket.worker.js';
  *   dedicated queue — see `src/queue/notifications.ts` for why.
  * - One cleanup worker that drains the cron-driven `cleanup` queue.
  *
- * Workers live in the same process as the API for now — the websocket
- * worker reads `io` from a module singleton populated by the Fastify
- * plugin. Day 13 splits the API and worker processes by switching to the
- * Socket.io Redis adapter for cross-process delivery.
+ * Workers live in the same process as the API. The websocket worker
+ * reads `io` from a module singleton populated by the Fastify plugin.
+ * The Socket.io Redis adapter is already wired up, so splitting workers
+ * onto a separate process is a deploy change rather than a code change —
+ * co-locating for now keeps the orchestration story simple.
  */
 export async function startWorkers(): Promise<Worker[]> {
   const workers: Worker[] = [
@@ -39,9 +40,10 @@ export async function stopWorkers(workers: Worker[]): Promise<void> {
 
 /**
  * Standalone entrypoint. `npm run start:workers` runs this file directly,
- * which boots the API + workers in a single process. Once Day 13 lands the
- * Redis adapter, this entrypoint can drop the API listen and run only the
- * workers.
+ * which boots the API + workers in a single process. To run workers on
+ * their own (a sensible split when scaling out), drop the `app.listen`
+ * call and the `http` shutdown target — the Socket.io Redis adapter
+ * handles cross-process delivery.
  */
 async function bootstrap(): Promise<void> {
   const { createApp } = await import('../app.js');

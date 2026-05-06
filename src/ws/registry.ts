@@ -4,10 +4,11 @@
  * One user can have many concurrent connections (laptop + phone + a second
  * browser tab), so the value side is a Set, not a single id.
  *
- * Single-process only — Day 13 swaps this for the Socket.io Redis adapter so
- * delivery works across multiple API instances. Until then, every API node
- * has its own picture of who's online, which is fine because there's only
- * one node.
+ * Limited to this process: with multiple API replicas, each only knows
+ * about the sockets it's hosting. The Socket.io Redis adapter handles
+ * cross-node fan-out for `io.emit`, but presence checks like "is this
+ * user online anywhere?" would need a Redis-backed registry. Single-replica
+ * deploys are unaffected.
  */
 const userToSockets = new Map<string, Set<string>>();
 const socketToUser = new Map<string, string>();

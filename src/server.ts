@@ -17,9 +17,10 @@ try {
   process.exit(1);
 }
 
-// Boot the BullMQ workers in the same process as the API. Single-process
-// today; Day 13 introduces the Socket.io Redis adapter and lets these run
-// on a separate node.
+// Boot the BullMQ workers in the same process as the API. The Socket.io
+// Redis adapter is already wired up, so in principle these could run as a
+// separate process; keeping them in-process for now because it's one less
+// thing to orchestrate at the deploy level.
 const workers = await startWorkers();
 
 // Order matters:

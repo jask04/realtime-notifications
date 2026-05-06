@@ -19,7 +19,7 @@ export interface NotificationJobData {
 // "wrong" worker grabbed first.
 //
 // Splitting also lets each channel tune retries, concurrency, and rate
-// limits independently — Day 9 onwards exercises that.
+// limits independently.
 export const WEBSOCKET_QUEUE = 'notifications-websocket';
 export const EMAIL_QUEUE = 'notifications-email';
 
