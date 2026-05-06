@@ -84,6 +84,10 @@ queue, per-recipient rate limiting, graceful shutdown, structured logging.
 - **Graceful shutdown closes resources in dependency order**: HTTP first
   (no new requests), then workers (drain in-flight jobs), then queues, then
   Prisma, then Redis (last, because everyone above held connections to it).
+- **Demo users get garbage-collected hourly.** The landing page mints
+  throwaway `demo+@demo.local` users; a BullMQ repeatable job
+  (`upsertJobScheduler`, idempotent across replicas) sweeps anything older
+  than 24h, with notifications cascade-deleting via the FK.
 
 ## Stack
 

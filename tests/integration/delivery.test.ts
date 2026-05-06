@@ -50,7 +50,7 @@ describe('end-to-end websocket delivery', () => {
     const addr = app.server.address() as AddressInfo;
     url = `http://127.0.0.1:${addr.port}`;
 
-    workers = startWorkers();
+    workers = await startWorkers();
 
     const res = await app.inject({
       method: 'POST',

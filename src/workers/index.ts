@@ -1,20 +1,32 @@
 import type { Worker } from 'bullmq';
 import { logger } from '../lib/logger.js';
+import { scheduleCleanup } from '../queue/cleanup.js';
+import { createCleanupWorker } from './cleanup.worker.js';
 import { createEmailWorker } from './email.worker.js';
 import { createWebsocketWorker } from './websocket.worker.js';
 
 /**
- * Boot every delivery worker this process runs and return them so the
- * caller can close them on shutdown. One worker per channel; each owns
- * its own queue (see `src/queue/notifications.ts` for why).
+ * Boot every worker this process runs and return them so the caller can
+ * close them on shutdown.
+ *
+ * - One delivery worker per channel (websocket, email). They each own a
+ *   dedicated queue — see `src/queue/notifications.ts` for why.
+ * - One cleanup worker that drains the cron-driven `cleanup` queue.
  *
  * Workers live in the same process as the API for now — the websocket
  * worker reads `io` from a module singleton populated by the Fastify
  * plugin. Day 13 splits the API and worker processes by switching to the
  * Socket.io Redis adapter for cross-process delivery.
  */
-export function startWorkers(): Worker[] {
-  const workers = [createWebsocketWorker(), createEmailWorker()];
+export async function startWorkers(): Promise<Worker[]> {
+  const workers: Worker[] = [
+    createWebsocketWorker(),
+    createEmailWorker(),
+    createCleanupWorker(),
+  ];
+  // Register the cron schedule. `upsertJobScheduler` is idempotent on its
+  // id, so calling it on every boot (or from every replica) is safe.
+  await scheduleCleanup();
   logger.info({ count: workers.length }, 'workers started');
   return workers;
 }
@@ -38,11 +50,12 @@ async function bootstrap(): Promise<void> {
   const { redis } = await import('../queue/connection.js');
   const { deadLetterQueue } = await import('../queue/deadletter.js');
   const { notificationQueues } = await import('../queue/notifications.js');
+  const { cleanupQueue } = await import('../queue/cleanup.js');
   const { installGracefulShutdown } = await import('../lib/shutdown.js');
 
   const app = await createApp();
   await app.listen({ port: config.PORT, host: '0.0.0.0' });
-  const workers = startWorkers();
+  const workers = await startWorkers();
 
   // Same close order as src/server.ts — see the comment there for why.
   installGracefulShutdown([
@@ -53,6 +66,7 @@ async function bootstrap(): Promise<void> {
       close: async () => {
         await Promise.all(notificationQueues.map((q) => q.close()));
         await deadLetterQueue.close();
+        await cleanupQueue.close();
       },
     },
     { name: 'prisma', close: () => prisma.$disconnect() },

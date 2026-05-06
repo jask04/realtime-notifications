@@ -48,7 +48,7 @@ describe('email delivery worker', () => {
     app = await createApp();
     await app.ready();
 
-    workers = startWorkers();
+    workers = await startWorkers();
 
     const res = await app.inject({
       method: 'POST',

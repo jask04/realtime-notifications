@@ -2,6 +2,7 @@ import { createApp } from './app.js';
 import { config } from './config.js';
 import { prisma } from './db/client.js';
 import { installGracefulShutdown } from './lib/shutdown.js';
+import { cleanupQueue } from './queue/cleanup.js';
 import { redis } from './queue/connection.js';
 import { deadLetterQueue } from './queue/deadletter.js';
 import { notificationQueues } from './queue/notifications.js';
@@ -19,7 +20,7 @@ try {
 // Boot the BullMQ workers in the same process as the API. Single-process
 // today; Day 13 introduces the Socket.io Redis adapter and lets these run
 // on a separate node.
-const workers = startWorkers();
+const workers = await startWorkers();
 
 // Order matters:
 //  1. Stop the HTTP server first so no new requests start mid-shutdown.
@@ -39,6 +40,7 @@ installGracefulShutdown([
     close: async () => {
       await Promise.all(notificationQueues.map((q) => q.close()));
       await deadLetterQueue.close();
+      await cleanupQueue.close();
     },
   },
   { name: 'prisma', close: () => prisma.$disconnect() },
