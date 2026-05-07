@@ -9,6 +9,8 @@ queue, per-recipient rate limiting, graceful shutdown, structured logging.
 
 **Live demo:** [`realtime-notifications-production.up.railway.app`](https://realtime-notifications-production.up.railway.app) — click *Connect*, then *Send*. Mints a 1-hour demo token, opens a WebSocket, and watches a notification round-trip through the queue back to your browser.
 
+[![Demo: connect, send a notification, watch it round-trip through the queue back to the browser](docs/demo.gif)](https://realtime-notifications-production.up.railway.app)
+
 ## What it does
 
 - `POST /notifications` — accept a notification, write a row in Postgres,
