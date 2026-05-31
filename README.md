@@ -7,9 +7,9 @@ fallback for everyone else, and a Postgres history of every send. Built with
 production patterns I'd want to ship at work — idempotency, dead-letter
 queue, per-recipient rate limiting, graceful shutdown, structured logging.
 
-**Live demo:** [`realtime-notifications-production.up.railway.app`](https://realtime-notifications-production.up.railway.app) — click *Connect*, then *Send*. Mints a 1-hour demo token, opens a WebSocket, and watches a notification round-trip through the queue back to your browser.
+**Demo:** the clip below shows the full pipeline end-to-end — paste a token, open a WebSocket, send a notification, and watch it round-trip through the queue back to the browser. The live deployment is paused to keep this project free to host; spin it up locally in a minute with `docker compose up -d && npm run dev`, or follow the [Deploying](#deploying) section — `railway.toml` makes it a one-click Railway redeploy.
 
-[![Demo: connect, send a notification, watch it round-trip through the queue back to the browser](docs/demo.gif)](https://realtime-notifications-production.up.railway.app)
+![Demo: connect, send a notification, watch it round-trip through the queue back to the browser](docs/demo.gif)
 
 ## What it does
 
