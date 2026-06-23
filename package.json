@@ -9,7 +9,7 @@
     "start": "prisma migrate deploy && node dist/server.js",
     "start:workers": "tsx src/workers/index.ts",
     "test": "vitest run",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
     "typecheck": "tsc --noEmit",
     "db:migrate": "prisma migrate dev",
     "db:generate": "prisma generate",
