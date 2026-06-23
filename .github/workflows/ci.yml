@@ -4,6 +4,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 # Cancel any older run on the same branch when a new push lands — saves
 # minutes when pushing several commits in quick succession.
