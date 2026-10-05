@@ -79,7 +79,11 @@ const websocketPluginImpl: FastifyPluginAsync = async (app) => {
   // future changes to the connection setup.
   const pubClient = redis.duplicate();
   const subClient = redis.duplicate();
+  await Promise.all([pubClient.ping(), subClient.ping()]);
   io.adapter(createAdapter(pubClient, subClient));
+  // The adapter queues subscriptions without awaiting them. A command
+  // after those subscriptions makes app.ready() include Redis readiness.
+  await subClient.ping();
 
   io.use((socket, next) => {
     try {
@@ -122,6 +126,9 @@ const websocketPluginImpl: FastifyPluginAsync = async (app) => {
   // — otherwise Vitest hangs on open sockets at the end of a test run.
   app.addHook('onClose', async () => {
     await io.close();
+    // Adapter.close() also queues unsubscribe commands without awaiting
+    // them. Drain those replies before QUIT can close their connection.
+    await subClient.ping();
     // Only nil the singleton if we still own it. If a second app was
     // registered after this one (multi-node test), it overwrote
     // `activeIo` and we shouldn't clobber its reference here.
