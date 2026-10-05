@@ -13,6 +13,7 @@ import { prisma } from '../../src/db/client.js';
 import { redis } from '../../src/queue/connection.js';
 import {
   enqueueNotification,
+  emailQueue,
   notificationQueues,
 } from '../../src/queue/notifications.js';
 import { deadLetterQueue } from '../../src/queue/deadletter.js';
@@ -48,6 +49,12 @@ describe('email delivery worker', () => {
     app = await createApp();
     await app.ready();
 
+    // Earlier test files can leave jobs whose database fixtures are gone.
+    // Clear those jobs before workers can race this suite's setup.
+    await Promise.all(
+      notificationQueues.map((q) => q.obliterate({ force: true })),
+    );
+    await deadLetterQueue.obliterate({ force: true });
     workers = await startWorkers();
 
     const res = await app.inject({
@@ -73,12 +80,73 @@ describe('email delivery worker', () => {
   });
 
   beforeEach(async () => {
-    sendMailMock.mockClear();
+    await Promise.all(workers.map((w) => w.pause()));
     await Promise.all(
       notificationQueues.map((q) => q.obliterate({ force: true })),
     );
     await deadLetterQueue.obliterate({ force: true });
     await prisma.notification.deleteMany({ where: { userId } });
+    sendMailMock.mockClear();
+    await Promise.all(workers.map((w) => w.resume()));
+  });
+
+  test('deleted notification: no SMTP send, job lands in DLQ', async () => {
+    const notification = await prisma.notification.create({
+      data: {
+        userId,
+        type: 'deleted',
+        channel: 'email',
+        payload: { subject: 'must not send', html: '<p>deleted</p>' },
+      },
+    });
+    await prisma.notification.delete({ where: { id: notification.id } });
+    await enqueueNotification(
+      {
+        notificationId: notification.id,
+        userId,
+        channel: 'email',
+        payload: { subject: 'must not send', html: '<p>deleted</p>' },
+      },
+      { attempts: 1, backoff: undefined },
+    );
+
+    await vi.waitFor(
+      async () => {
+        const jobs = await deadLetterQueue.getJobs(['waiting']);
+        const job = jobs.find((j) => j.data.notificationId === notification.id);
+        expect(job?.data.reason).toMatch(/notification .* no longer exists/);
+      },
+      { timeout: 3000 },
+    );
+    expect(sendMailMock).not.toHaveBeenCalled();
+  });
+
+  test('replayed job for a SENT notification does not send again', async () => {
+    const notification = await prisma.notification.create({
+      data: {
+        userId,
+        type: 'already-sent',
+        channel: 'email',
+        status: 'SENT',
+        deliveredAt: new Date(),
+        payload: { subject: 'already sent', html: '<p>sent</p>' },
+      },
+    });
+    const jobId = await enqueueNotification({
+      notificationId: notification.id,
+      userId,
+      channel: 'email',
+      payload: { subject: 'already sent', html: '<p>sent</p>' },
+    });
+    await vi.waitFor(
+      async () => {
+        expect(await (await emailQueue.getJob(jobId))?.getState()).toBe(
+          'completed',
+        );
+      },
+      { timeout: 3000 },
+    );
+    expect(sendMailMock).not.toHaveBeenCalled();
   });
 
   test('valid email payload: nodemailer is called and DB flips to SENT', async () => {

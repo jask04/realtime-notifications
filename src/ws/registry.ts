@@ -6,9 +6,9 @@
  *
  * Limited to this process: with multiple API replicas, each only knows
  * about the sockets it's hosting. The Socket.io Redis adapter handles
- * cross-node fan-out for `io.emit`, but presence checks like "is this
- * user online anywhere?" would need a Redis-backed registry. Single-replica
- * deploys are unaffected.
+ * cross-node fan-out. The delivery worker uses user rooms and
+ * `fetchSockets()` for cluster-wide presence; this registry is only a local
+ * connection view for diagnostics and tests.
  */
 const userToSockets = new Map<string, Set<string>>();
 const socketToUser = new Map<string, string>();

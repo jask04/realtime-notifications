@@ -39,6 +39,17 @@ export function createEmailWorker(): Worker<NotificationJobData> {
 async function handleJob(job: Job<NotificationJobData>): Promise<void> {
   const { notificationId, userId, payload } = job.data;
 
+  // Never send an orphaned job. Retry a missing row because enqueue can
+  // precede the API transaction's commit; permanently missing rows exhaust
+  // the queue's retry budget without contacting SMTP.
+  const notification = await prisma.notification.findUnique({
+    where: { id: notificationId },
+  });
+  if (!notification) {
+    throw new Error(`notification ${notificationId} no longer exists`);
+  }
+  if (notification.status === 'SENT') return;
+
   // Validate the channel-specific payload here; a malformed payload won't
   // get better with retries, so opt out of the retry budget.
   const parsed = emailPayloadSchema.safeParse(payload);

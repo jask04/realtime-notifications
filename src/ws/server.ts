@@ -34,6 +34,10 @@ declare module 'fastify' {
 // reading the local io is enough.
 let activeIo: SocketIOServer | null = null;
 
+export function userRoom(userId: string): string {
+  return `user:${userId}`;
+}
+
 export function getIo(): SocketIOServer {
   if (!activeIo) {
     throw new Error(
@@ -53,12 +57,9 @@ export function getIo(): SocketIOServer {
  * the auth payload). Bad/missing tokens are rejected before `connection`
  * fires — handlers downstream can trust `socket.data.userId` exists.
  *
- * The Redis adapter makes `io.to(socketId).emit(...)` route across every
- * API instance: each Fastify pod attaches its io to the same pub/sub
- * channels, so a notification queued on node A can be delivered to a
- * socket connected to node B. Without the adapter, the local io has no
- * idea node B's sockets exist and the emit silently no-ops on a different
- * machine.
+ * Authenticated sockets join their user's room. The Redis adapter lets
+ * the delivery worker query that room's presence and emit across every
+ * API instance, including sockets connected only to another process.
  *
  * Registered as a Fastify plugin so the FastifyInstance type generic
  * (Pino logger) lines up cleanly at the call site.
@@ -97,6 +98,7 @@ const websocketPluginImpl: FastifyPluginAsync = async (app) => {
 
   io.on('connection', (socket) => {
     const { userId } = socket.data;
+    void socket.join(userRoom(userId));
     registerSocket(userId, socket.id);
     app.log.debug({ userId, socketId: socket.id }, 'ws connected');
 
