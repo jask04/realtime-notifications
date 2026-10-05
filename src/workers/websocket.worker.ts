@@ -1,12 +1,11 @@
-import { UnrecoverableError, Worker, type Job } from 'bullmq';
+import { Worker, type Job } from 'bullmq';
 import { prisma } from '../db/client.js';
 import { redis } from '../queue/connection.js';
 import {
   WEBSOCKET_QUEUE,
   type NotificationJobData,
 } from '../queue/notifications.js';
-import { getSockets } from '../ws/registry.js';
-import { getIo } from '../ws/server.js';
+import { getIo, userRoom } from '../ws/server.js';
 import { attachFailureHandler } from './failure-handler.js';
 
 // Sentinel reason so the failed-handler / DLQ entry shows a human-readable
@@ -25,8 +24,8 @@ export const RECIPIENT_OFFLINE = 'recipient has no active connections';
  * - Offline recipients throw `RECIPIENT_OFFLINE`, which BullMQ retries
  *   under the exponential backoff configured at enqueue time. After the
  *   retry budget is exhausted the failure handler DLQs the job.
- * - "Notification row missing" throws an UnrecoverableError because no
- *   amount of retrying will bring it back — straight to DLQ.
+ * - A missing row retries: a job can arrive before the API's database
+ *   transaction commits. A deleted or rolled-back row exhausts retries.
  */
 export function createWebsocketWorker(): Worker<NotificationJobData> {
   const worker = new Worker<NotificationJobData>(WEBSOCKET_QUEUE, handleJob, {
@@ -41,31 +40,30 @@ export function createWebsocketWorker(): Worker<NotificationJobData> {
 async function handleJob(job: Job<NotificationJobData>): Promise<void> {
   const { userId, notificationId, payload } = job.data;
 
-  const sockets = getSockets(userId);
-  if (sockets.length === 0) {
-    throw new Error(RECIPIENT_OFFLINE);
-  }
-
   const notification = await prisma.notification.findUnique({
     where: { id: notificationId },
   });
   if (!notification) {
-    // The row was rolled back or deleted out from under us. Retrying won't
-    // bring it back, so opt out of the retry budget.
-    throw new UnrecoverableError(
-      `notification ${notificationId} no longer exists`,
-    );
+    throw new Error(`notification ${notificationId} no longer exists`);
   }
 
+  if (notification.status === 'SENT') return;
+
   const io = getIo();
-  for (const socketId of sockets) {
-    io.to(socketId).emit('notification', {
-      id: notification.id,
-      type: notification.type,
-      payload,
-      createdAt: notification.createdAt.toISOString(),
-    });
+  const room = userRoom(userId);
+  // The Redis adapter queries every replica, including processes with no
+  // local connections for this user.
+  const sockets = await io.in(room).fetchSockets();
+  if (sockets.length === 0) {
+    throw new Error(RECIPIENT_OFFLINE);
   }
+
+  io.to(room).emit('notification', {
+    id: notification.id,
+    type: notification.type,
+    payload,
+    createdAt: notification.createdAt.toISOString(),
+  });
 
   await prisma.notification.update({
     where: { id: notificationId },

@@ -2,8 +2,9 @@
 
 [![CI](https://github.com/jask04/realtime-notifications/actions/workflows/ci.yml/badge.svg)](https://github.com/jask04/realtime-notifications/actions/workflows/ci.yml)
 
-Real-time notification service. WebSocket delivery for online users, an email
-fallback for everyone else, and a Postgres history of every send. Built with
+Real-time notification service. WebSocket and email delivery channels, and a
+Postgres history of every send. Callers select the channel; offline WebSocket
+recipients retry and dead-letter rather than automatically switching to email. Built with
 production patterns I'd want to ship at work — idempotency, dead-letter
 queue, per-recipient rate limiting, graceful shutdown, structured logging.
 
@@ -82,7 +83,13 @@ queue, per-recipient rate limiting, graceful shutdown, structured logging.
   under load.
 - **The Socket.io Redis adapter** lets the WebSocket worker push to a user
   whose socket is connected to a different API instance — the prerequisite
-  for horizontal scaling.
+  for horizontal scaling. Each socket joins a user room; the worker checks
+  that room across replicas before emitting, so presence is not limited to
+  its own process. A separate-process integration test exercises this path.
+- **Email jobs check the notification row before SMTP.** Deleted or rolled-back
+  notifications are not sent. Missing rows retry because a queue job can
+  arrive before the API transaction commits. Replayed jobs for rows already
+  marked `SENT` complete without a second send.
 - **Graceful shutdown closes resources in dependency order**: HTTP first
   (no new requests), then workers (drain in-flight jobs), then queues, then
   Prisma, then Redis (last, because everyone above held connections to it).
