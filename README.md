@@ -8,7 +8,13 @@ recipients retry and dead-letter rather than automatically switching to email. B
 production patterns I'd want to ship at work — idempotency, dead-letter
 queue, per-recipient rate limiting, graceful shutdown, structured logging.
 
-**Demo:** the clip below shows the full pipeline end-to-end — paste a token, open a WebSocket, send a notification, and watch it round-trip through the queue back to the browser. The live deployment is paused to keep this project free to host; spin it up locally in a minute with `docker compose up -d && npm run dev`, or follow the [Deploying](#deploying) section — `railway.toml` makes it a one-click Railway redeploy.
+**Demo:** the clip below shows the full pipeline end-to-end — paste a token,
+open a WebSocket, send a notification, and watch it round-trip through the
+queue back to the browser. The previous Railway trial has expired, so the
+hosted demo is unavailable. The recorded demo, source and CI remain viewable.
+Run it locally using the [Quickstart](#quickstart), or follow
+[Deploying](#deploying) after choosing a hosting plan; `railway.toml` contains
+the deployment settings.
 
 ![Demo: connect, send a notification, watch it round-trip through the queue back to the browser](docs/demo.gif)
 
