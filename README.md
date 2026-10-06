@@ -12,7 +12,7 @@ queue, per-recipient rate limiting, graceful shutdown, structured logging.
 open a WebSocket, send a notification, and watch it round-trip through the
 queue back to the browser. The previous Railway trial has expired, so the
 hosted demo is unavailable. The recorded demo, source and CI remain viewable.
-Run it locally using the [Quickstart](#quickstart), or follow
+Run it locally using [Running locally](#running-locally), or follow
 [Deploying](#deploying) after choosing a hosting plan; `railway.toml` contains
 the deployment settings.
 
